@@ -1,0 +1,11 @@
+*.bas text eol=crlf
+*.frm text eol=crlf
+*.vbp text eol=crlf
+*.vbw text eol=crlf
+*.html text
+*.txt text eol=crlf
+*.frx binary
+*.zip binary
+*.exe binary
+*.scr binary
+*.INI text eol=crlf
