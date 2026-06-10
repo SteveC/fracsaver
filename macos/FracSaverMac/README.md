@@ -27,3 +27,13 @@ make install-local
 Then open macOS System Settings and choose `FracSaver`.
 
 The current build is ad-hoc signed for local testing, not notarized.
+
+## Debug Log
+
+The saver writes lifecycle, settings, and render diagnostics to:
+
+```text
+~/Library/Logs/FracSaverMac.log
+```
+
+The settings sheet also shows this path and includes a Reveal button.

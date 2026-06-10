@@ -13,6 +13,9 @@ struct RenderSmokeTest {
                 if image.size.width != 320 || image.size.height != 240 {
                     failures.append("\(module.id): unexpected image size \(image.size)")
                 }
+                if canvas.nonBlackPixelCount() == 0 {
+                    failures.append("\(module.id): rendered a fully black bitmap")
+                }
             }
         }
         if failures.isEmpty {

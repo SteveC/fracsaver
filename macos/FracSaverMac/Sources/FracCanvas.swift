@@ -157,6 +157,16 @@ final class FracCanvas {
         return image
     }
 
+    func nonBlackPixelCount() -> Int {
+        var count = 0
+        for index in stride(from: 0, to: pixels.count, by: 4) {
+            if pixels[index] > 0 || pixels[index + 1] > 0 || pixels[index + 2] > 0 {
+                count += 1
+            }
+        }
+        return count
+    }
+
     private static func rgba(_ color: NSColor) -> (UInt8, UInt8, UInt8, UInt8) {
         let converted = color.usingColorSpace(.deviceRGB) ?? .white
         return (

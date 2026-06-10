@@ -19,7 +19,7 @@ struct FracSettings: Codable, Equatable {
     static let defaults = FracSettings(
         showModuleName: true,
         secondsPerModule: 12,
-        pointBudgetScale: 0.35,
+        pointBudgetScale: 0.12,
         modules: [
             FracModule(id: "Lorentz", name: "Lorenz Attractor", category: "Dynamic", parameters: [40000], enabled: true),
             FracModule(id: "ross", name: "Rossler Attractor", category: "Dynamic", parameters: [80000], enabled: true),
@@ -72,7 +72,7 @@ struct FracSettings: Codable, Equatable {
 }
 
 enum SettingsStore {
-    private static let key = "FracSaverSettings.v1"
+    private static let key = "FracSaverSettings.v2"
     private static let moduleName = "com.stevecoast.fracsaver.mac"
 
     static func load() -> FracSettings {
