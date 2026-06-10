@@ -566,33 +566,90 @@ final class FracRenderer {
     }
 
     private func oneInEight(percent: Double) {
-        majority(rule: 1, seedPercent: percent / 100)
-    }
-
-    private func life(generations: Int) {
-        let cols = 160
-        let rows = 100
+        let cols = min(220, max(80, canvas.width / 3))
+        let rows = min(160, max(60, canvas.height / 3))
         let cw = Double(canvas.width) / Double(cols)
         let ch = Double(canvas.height) / Double(rows)
-        var cells = (0..<rows).map { _ in (0..<cols).map { _ in rng.next() < 0.25 ? 1 : 0 } }
-        for _ in 0..<max(1, min(30, generations * 4)) {
-            var next = cells
-            for y in 1..<(rows - 1) {
-                for x in 1..<(cols - 1) {
-                    var sum = 0
+        var cells = Array(repeating: Array(repeating: 0, count: cols), count: rows)
+        var next = cells
+        cells[rows / 2][cols / 2] = 1
+        let iterations = max(10, min(Int(percent), min(cols, rows) / 2))
+        for radius in 1...iterations {
+            next = Array(repeating: Array(repeating: 0, count: cols), count: rows)
+            let minY = max(1, rows / 2 - radius)
+            let maxY = min(rows - 2, rows / 2 + radius)
+            let minX = max(1, cols / 2 - radius)
+            let maxX = min(cols - 2, cols / 2 + radius)
+            for y in minY...maxY {
+                for x in minX...maxX {
+                    var count = cells[y][x]
                     for dy in -1...1 {
                         for dx in -1...1 where !(dx == 0 && dy == 0) {
-                            sum += cells[y + dy][x + dx]
+                            count += cells[y + dy][x + dx]
                         }
                     }
-                    next[y][x] = (sum == 3 || (cells[y][x] == 1 && sum == 2)) ? 1 : 0
-                    if next[y][x] == 1 {
+                    if count == 1 {
+                        next[y][x] = 1
                         canvas.rect(CGRect(x: Double(x) * cw, y: Double(y) * ch, width: cw + 1, height: ch + 1), color: color)
                     }
                 }
             }
             cells = next
         }
+    }
+
+    private func life(generations: Int) {
+        let cols = min(180, max(80, canvas.width / 4))
+        let rows = min(120, max(60, canvas.height / 4))
+        let cw = Double(canvas.width) / Double(cols)
+        let ch = Double(canvas.height) / Double(rows)
+        var cells = (0..<rows).map { _ in (0..<cols).map { _ in rng.next() < 0.28 ? 1 : 0 } }
+        seedLifePatterns(&cells)
+        drawLife(cells, cellWidth: cw, cellHeight: ch, generation: 0)
+        for generation in 1...max(1, min(120, generations * 12)) {
+            var next = Array(repeating: Array(repeating: 0, count: cols), count: rows)
+            for y in 0..<rows {
+                for x in 0..<cols {
+                    var sum = 0
+                    for dy in -1...1 {
+                        for dx in -1...1 where !(dx == 0 && dy == 0) {
+                            let nx = (x + dx + cols) % cols
+                            let ny = (y + dy + rows) % rows
+                            sum += cells[ny][nx]
+                        }
+                    }
+                    next[y][x] = (sum == 3 || (cells[y][x] == 1 && sum == 2)) ? 1 : 0
+                }
+            }
+            cells = next
+            drawLife(cells, cellWidth: cw, cellHeight: ch, generation: generation)
+        }
+    }
+
+    private func seedLifePatterns(_ cells: inout [[Int]]) {
+        guard cells.count > 12, cells[0].count > 12 else { return }
+        let rows = cells.count
+        let cols = cells[0].count
+        func set(_ x: Int, _ y: Int) {
+            if x >= 0, y >= 0, y < rows, x < cols { cells[y][x] = 1 }
+        }
+        let glider = [(1, 0), (2, 1), (0, 2), (1, 2), (2, 2)]
+        for (index, origin) in [(cols / 5, rows / 5), (cols * 3 / 5, rows / 3), (cols / 3, rows * 2 / 3)].enumerated() {
+            for (x, y) in glider {
+                set(origin.0 + x + index * 2, origin.1 + y)
+            }
+        }
+    }
+
+    private func drawLife(_ cells: [[Int]], cellWidth cw: Double, cellHeight ch: Double, generation: Int) {
+        canvas.clear(.black)
+        let liveColor = generation % 2 == 0 ? color : .spectrum(Double((generation % 40)) / 40)
+        for y in cells.indices {
+            for x in cells[y].indices where cells[y][x] == 1 {
+                canvas.rect(CGRect(x: Double(x) * cw, y: Double(y) * ch, width: cw + 1, height: ch + 1), color: liveColor)
+            }
+        }
+        canvas.progressHandler?(canvas)
     }
 
     private func continuousCA() {

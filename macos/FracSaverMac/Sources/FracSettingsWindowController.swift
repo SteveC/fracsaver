@@ -11,7 +11,7 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
     private let moduleDescription = NSTextField(wrappingLabelWithString: "")
     private let parameterStack = NSStackView()
     private let logPathField = NSTextField(labelWithString: FracLogger.logURL.path)
-    private let groupTabs = NSSegmentedControl()
+    private let groupPopup = NSPopUpButton()
     private let previewImageView = NSImageView()
     private let previewStatus = NSTextField(labelWithString: "Select a module to preview.")
     private var selectedIndex = 0
@@ -29,12 +29,16 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
     init(settings: FracSettings, onSave: @escaping (FracSettings) -> Void) {
         self.settings = settings
         self.onSave = onSave
+        let visible = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 900, height: 700)
+        let width = min(780, max(640, visible.width - 80))
+        let height = min(540, max(480, visible.height - 80))
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 920, height: 600),
-            styleMask: [.titled],
+            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
+            styleMask: [.titled, .resizable],
             backing: .buffered,
             defer: false
         )
+        window.minSize = NSSize(width: 640, height: 460)
         window.title = "FracSaver Settings"
         super.init(window: window)
         FracLogger.log("settings window created")
@@ -133,30 +137,34 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
     private func makeModuleArea() -> NSView {
         let split = NSStackView()
         split.orientation = .horizontal
-        split.spacing = 14
+        split.spacing = 12
         split.alignment = .top
         let left = NSStackView()
         left.orientation = .vertical
         left.spacing = 8
-        left.addArrangedSubview(makeGroupTabs())
+        left.addArrangedSubview(makeGroupFilter())
         left.addArrangedSubview(makeTable())
         split.addArrangedSubview(left)
         split.addArrangedSubview(makeInspector())
         return split
     }
 
-    private func makeGroupTabs() -> NSView {
+    private func makeGroupFilter() -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .horizontal
+        stack.spacing = 8
+        stack.alignment = .centerY
+        let title = label("Group")
+        title.font = .systemFont(ofSize: 12, weight: .medium)
         let names = groups
-        groupTabs.segmentCount = names.count
-        groupTabs.segmentStyle = .rounded
-        groupTabs.target = self
-        groupTabs.action = #selector(changeGroup(_:))
-        for (index, name) in names.enumerated() {
-            groupTabs.setLabel(name, forSegment: index)
-            groupTabs.setWidth(max(58, CGFloat(name.count * 8 + 18)), forSegment: index)
-        }
-        groupTabs.selectedSegment = 0
-        return groupTabs
+        groupPopup.removeAllItems()
+        groupPopup.addItems(withTitles: names)
+        groupPopup.target = self
+        groupPopup.action = #selector(changeGroup(_:))
+        groupPopup.selectItem(withTitle: selectedGroup)
+        stack.addArrangedSubview(title)
+        stack.addArrangedSubview(groupPopup)
+        return stack
     }
 
     private func makeTable() -> NSScrollView {
@@ -165,28 +173,28 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         tableView.usesAlternatingRowBackgroundColors = true
         tableView.headerView = NSTableHeaderView()
         tableView.addTableColumn(column("enabled", title: "", width: 36))
-        tableView.addTableColumn(column("name", title: "Module", width: 180))
-        tableView.addTableColumn(column("category", title: "Group", width: 90))
-        tableView.addTableColumn(column("summary", title: "Settings", width: 180))
+        tableView.addTableColumn(column("name", title: "Module", width: 170))
+        tableView.addTableColumn(column("category", title: "Group", width: 80))
+        tableView.addTableColumn(column("summary", title: "Settings", width: 110))
 
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.documentView = tableView
-        scroll.widthAnchor.constraint(equalToConstant: 520).isActive = true
-        scroll.heightAnchor.constraint(equalToConstant: 400).isActive = true
+        scroll.widthAnchor.constraint(equalToConstant: 410).isActive = true
+        scroll.heightAnchor.constraint(equalToConstant: 300).isActive = true
         return scroll
     }
 
     private func makeInspector() -> NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
-        stack.spacing = 10
-        stack.widthAnchor.constraint(equalToConstant: 330).isActive = true
+        stack.spacing = 8
+        stack.widthAnchor.constraint(equalToConstant: 300).isActive = true
 
         moduleTitle.font = .systemFont(ofSize: 18, weight: .semibold)
         moduleDescription.font = .systemFont(ofSize: 12)
         moduleDescription.textColor = .secondaryLabelColor
-        moduleDescription.maximumNumberOfLines = 4
+        moduleDescription.maximumNumberOfLines = 3
 
         parameterStack.orientation = .vertical
         parameterStack.spacing = 8
@@ -195,7 +203,7 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         previewImageView.wantsLayer = true
         previewImageView.layer?.backgroundColor = NSColor.black.cgColor
         previewImageView.layer?.cornerRadius = 6
-        previewImageView.heightAnchor.constraint(equalToConstant: 190).isActive = true
+        previewImageView.heightAnchor.constraint(equalToConstant: 150).isActive = true
 
         let previewButton = NSButton(title: "Render Preview", target: self, action: #selector(renderPreview))
         previewStatus.font = .systemFont(ofSize: 11)
@@ -275,10 +283,8 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         DispatchQueue.main.async { self.renderPreview() }
     }
 
-    @objc private func changeGroup(_ sender: NSSegmentedControl) {
-        let names = groups
-        guard sender.selectedSegment >= 0, sender.selectedSegment < names.count else { return }
-        selectedGroup = names[sender.selectedSegment]
+    @objc private func changeGroup(_ sender: NSPopUpButton) {
+        selectedGroup = sender.titleOfSelectedItem ?? "All"
         tableView.reloadData()
         let visible = filteredIndices
         if let row = visible.firstIndex(of: selectedIndex) {
