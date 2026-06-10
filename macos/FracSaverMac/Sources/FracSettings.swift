@@ -7,6 +7,7 @@ struct FracModule: Codable, Equatable {
     var category: String
     var parameters: [Double]
     var enabled: Bool
+    var stringParameters: [String] = []
 }
 
 struct FracSettings: Codable, Equatable {
@@ -55,6 +56,7 @@ struct FracSettings: Codable, Equatable {
             FracModule(id: "levy", name: "Levy Dragon", category: "IFS 3", parameters: [350000, 2], enabled: true),
             FracModule(id: "life", name: "Life", category: "CAs", parameters: [5], enabled: true),
             FracModule(id: "Contin", name: "Continuous CA", category: "CAs", parameters: [], enabled: true),
+            FracModule(id: "ThrowPic", name: "Throw Picture", category: "ThrowPic", parameters: [10], enabled: false, stringParameters: [""]),
             FracModule(id: "PropSier", name: "Proper Sierpinski Carpet", category: "Gasket", parameters: [4], enabled: true),
             FracModule(id: "boid", name: "Boids", category: "Boids", parameters: [20, 50, 0.4, 0.5], enabled: true),
             FracModule(id: "hilbert", name: "Hilbert Curve", category: "Curves", parameters: [], enabled: true),
@@ -103,6 +105,9 @@ enum SettingsStore {
             module.category = defaultModule.category
             if module.parameters.count != defaultModule.parameters.count {
                 module.parameters = defaultModule.parameters
+            }
+            if module.stringParameters.count != defaultModule.stringParameters.count {
+                module.stringParameters = defaultModule.stringParameters
             }
             return module
         }

@@ -55,6 +55,7 @@ final class FracRenderer {
         case "levy": levy(iterations: iterations(0, fallback: 350000), sides: Int(param(1, 2)))
         case "life": life(generations: Int(param(0, 5)))
         case "Contin": continuousCA()
+        case "ThrowPic": throwPicture()
         case "PropSier": properSierpinski(depth: Int(param(0, 4)))
         case "boid": boids(seconds: param(0, 20), count: Int(param(1, 50)), acc: param(2, 0.4), rand: param(3, 0.5))
         case "hilbert": hilbert()
@@ -850,6 +851,55 @@ final class FracRenderer {
     private func labelOnly() {
         for _ in 0..<5000 {
             canvas.point(rng.int(canvas.width), rng.int(canvas.height), .spectrum(rng.next()))
+        }
+    }
+
+    private func throwPicture() {
+        guard let path = module.stringParameters.first, !path.isEmpty, let image = NSImage(contentsOfFile: NSString(string: path).expandingTildeInPath) else {
+            labelOnly()
+            return
+        }
+        let target = NSRect(x: 0, y: 0, width: canvas.width, height: canvas.height)
+        let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: canvas.width,
+            pixelsHigh: canvas.height,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: canvas.width * 4,
+            bitsPerPixel: 32
+        )!
+        NSGraphicsContext.saveGraphicsState()
+        if let context = NSGraphicsContext(bitmapImageRep: bitmap) {
+            NSGraphicsContext.current = context
+            NSColor.black.setFill()
+            target.fill()
+            let sourceSize = image.size
+            guard sourceSize.width > 0, sourceSize.height > 0 else {
+                NSGraphicsContext.restoreGraphicsState()
+                labelOnly()
+                return
+            }
+            let scale = min(target.width / sourceSize.width, target.height / sourceSize.height)
+            let size = NSSize(width: sourceSize.width * scale, height: sourceSize.height * scale)
+            let rect = NSRect(x: (target.width - size.width) / 2, y: (target.height - size.height) / 2, width: size.width, height: size.height)
+            image.draw(in: rect)
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        guard let cg = bitmap.cgImage else {
+            labelOnly()
+            return
+        }
+        let rep = NSBitmapImageRep(cgImage: cg)
+        for y in 0..<canvas.height {
+            for x in 0..<canvas.width {
+                if let sampled = rep.colorAt(x: x, y: y) {
+                    canvas.point(x, y, sampled)
+                }
+            }
         }
     }
 

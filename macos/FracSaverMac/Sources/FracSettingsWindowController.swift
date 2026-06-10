@@ -48,7 +48,7 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
             field.isBordered = true
             field.isBezeled = true
             field.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-            field.stringValue = module.parameters.map { format($0) }.joined(separator: ", ")
+            field.stringValue = parameterText(for: module)
             field.tag = row
             field.target = self
             field.action = #selector(updateParameters(_:))
@@ -157,13 +157,24 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
 
     @objc private func updateParameters(_ sender: NSTextField) {
         guard sender.tag < settings.modules.count else { return }
+        if settings.modules[sender.tag].id == "ThrowPic" {
+            let parts = sender.stringValue.split(separator: ",", maxSplits: 1).map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            if let path = parts.first {
+                settings.modules[sender.tag].stringParameters = [path]
+            }
+            if parts.count > 1, let seconds = Double(parts[1]) {
+                settings.modules[sender.tag].parameters = [max(1, seconds)]
+            }
+            sender.stringValue = parameterText(for: settings.modules[sender.tag])
+            return
+        }
         let values = sender.stringValue
             .split(separator: ",")
             .compactMap { Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
         if values.count == settings.modules[sender.tag].parameters.count {
             settings.modules[sender.tag].parameters = values
         } else {
-            sender.stringValue = settings.modules[sender.tag].parameters.map { format($0) }.joined(separator: ", ")
+            sender.stringValue = parameterText(for: settings.modules[sender.tag])
         }
     }
 
@@ -224,5 +235,14 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
             return String(Int(value))
         }
         return String(format: "%.3f", value)
+    }
+
+    private func parameterText(for module: FracModule) -> String {
+        if module.id == "ThrowPic" {
+            let path = module.stringParameters.first ?? ""
+            let seconds = module.parameters.first ?? 10
+            return "\(path), \(format(seconds))"
+        }
+        return module.parameters.map { format($0) }.joined(separator: ", ")
     }
 }
