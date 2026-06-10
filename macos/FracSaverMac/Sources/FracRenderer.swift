@@ -171,10 +171,22 @@ final class FracRenderer {
     }
 
     private func mandelbrot() {
-        let xa = param(0, -2.1)
-        let ya = param(1, 1.2)
-        let xb = param(2, 0.8)
-        let yb = param(3, -1.2)
+        let requestedXA = param(0, -2.1)
+        let requestedYA = param(1, 1.2)
+        let requestedXB = param(2, 0.8)
+        let requestedYB = param(3, -1.2)
+        let centerX = (requestedXA + requestedXB) / 2
+        let centerY = (requestedYA + requestedYB) / 2
+        let requestedWidth = abs(requestedXB - requestedXA)
+        let requestedHeight = abs(requestedYA - requestedYB)
+        let canvasAspect = Double(canvas.width) / Double(canvas.height)
+        let requestedAspect = requestedWidth / max(0.0001, requestedHeight)
+        let width = requestedAspect < canvasAspect ? requestedHeight * canvasAspect : requestedWidth
+        let height = requestedAspect < canvasAspect ? requestedHeight : requestedWidth / canvasAspect
+        let xa = centerX - width / 2
+        let xb = centerX + width / 2
+        let ya = centerY + height / 2
+        let yb = centerY - height / 2
         for py in 0..<canvas.height {
             for px in 0..<canvas.width {
                 let cr = xa + (xb - xa) * Double(px) / Double(canvas.width)
@@ -197,10 +209,13 @@ final class FracRenderer {
     private func juliaMorpher() {
         let cr = -0.78 + rng.next() * 0.25
         let ci = -0.18 + rng.next() * 0.35
+        let aspect = Double(canvas.width) / Double(canvas.height)
+        let planeHeight = 2.4
+        let planeWidth = planeHeight * aspect
         for py in 0..<canvas.height {
             for px in 0..<canvas.width {
-                var zr = 3 * (Double(px) / Double(canvas.width) - 0.5)
-                var zi = 2.3 * (Double(py) / Double(canvas.height) - 0.5)
+                var zr = planeWidth * (Double(px) / Double(canvas.width) - 0.5)
+                var zi = planeHeight * (Double(py) / Double(canvas.height) - 0.5)
                 var i = 0
                 while i < 70 && zr * zr + zi * zi <= 4 {
                     let nzr = zr * zr - zi * zi + cr
@@ -216,13 +231,14 @@ final class FracRenderer {
     private func juliaInverse(_ n: Int) {
         var x = 0.1, y = 0.1
         let c = CGPoint(x: -0.745, y: 0.113)
+        let fitScale = Double(min(canvas.width, canvas.height)) * 0.43
         for _ in 0..<n {
             let r = sqrt(hypot(x - c.x, y - c.y))
             let theta = atan2(y - c.y, x - c.x) / 2
             let sign = rng.next() < 0.5 ? -1.0 : 1.0
             x = sign * r * cos(theta)
             y = sign * r * sin(theta)
-            plot(x, y, scaleX: Double(canvas.width) * 0.32, scaleY: Double(canvas.height) * 0.32, offsetX: Double(canvas.width) / 2, offsetY: Double(canvas.height) / 2)
+            plot(x, y, scaleX: fitScale, scaleY: fitScale, offsetX: Double(canvas.width) / 2, offsetY: Double(canvas.height) / 2)
         }
     }
 

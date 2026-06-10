@@ -91,8 +91,10 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         guard let content = window.contentView else { return }
         let root = NSStackView()
         root.orientation = .vertical
-        root.spacing = 14
-        root.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 16, right: 18)
+        root.alignment = .leading
+        root.distribution = .fill
+        root.spacing = 10
+        root.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 14, right: 16)
         root.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(root)
 
@@ -115,8 +117,9 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
             [label("Render detail"), scaleSlider],
             [NSView(), showNameCheckbox]
         ])
+        controls.translatesAutoresizingMaskIntoConstraints = false
         controls.column(at: 0).xPlacement = .trailing
-        controls.column(at: 1).width = 300
+        controls.column(at: 1).width = 280
         controls.rowSpacing = 8
         controls.columnSpacing = 10
 
@@ -139,6 +142,7 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         split.orientation = .horizontal
         split.spacing = 12
         split.alignment = .top
+        split.distribution = .fill
         let left = NSStackView()
         left.orientation = .vertical
         left.spacing = 8
@@ -173,15 +177,15 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         tableView.usesAlternatingRowBackgroundColors = true
         tableView.headerView = NSTableHeaderView()
         tableView.addTableColumn(column("enabled", title: "", width: 36))
-        tableView.addTableColumn(column("name", title: "Module", width: 170))
-        tableView.addTableColumn(column("category", title: "Group", width: 80))
-        tableView.addTableColumn(column("summary", title: "Settings", width: 110))
+        tableView.addTableColumn(column("name", title: "Module", width: 158))
+        tableView.addTableColumn(column("category", title: "Group", width: 76))
+        tableView.addTableColumn(column("summary", title: "Settings", width: 92))
 
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.documentView = tableView
-        scroll.widthAnchor.constraint(equalToConstant: 410).isActive = true
-        scroll.heightAnchor.constraint(equalToConstant: 300).isActive = true
+        scroll.widthAnchor.constraint(equalToConstant: 374).isActive = true
+        scroll.heightAnchor.constraint(equalToConstant: 282).isActive = true
         return scroll
     }
 
@@ -189,7 +193,7 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.spacing = 8
-        stack.widthAnchor.constraint(equalToConstant: 300).isActive = true
+        stack.widthAnchor.constraint(equalToConstant: 320).isActive = true
 
         moduleTitle.font = .systemFont(ofSize: 18, weight: .semibold)
         moduleDescription.font = .systemFont(ofSize: 12)
@@ -203,7 +207,7 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         previewImageView.wantsLayer = true
         previewImageView.layer?.backgroundColor = NSColor.black.cgColor
         previewImageView.layer?.cornerRadius = 6
-        previewImageView.heightAnchor.constraint(equalToConstant: 150).isActive = true
+        previewImageView.heightAnchor.constraint(equalToConstant: 142).isActive = true
 
         let previewButton = NSButton(title: "Render Preview", target: self, action: #selector(renderPreview))
         previewStatus.font = .systemFont(ofSize: 11)
@@ -228,6 +232,8 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         title.font = .systemFont(ofSize: 12, weight: .medium)
         logPathField.lineBreakMode = .byTruncatingMiddle
         logPathField.isSelectable = true
+        logPathField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        logPathField.widthAnchor.constraint(lessThanOrEqualToConstant: 560).isActive = true
         let reveal = NSButton(title: "Reveal", target: self, action: #selector(revealLog))
         stack.addArrangedSubview(title)
         stack.addArrangedSubview(logPathField)
@@ -251,6 +257,7 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         ok.keyEquivalent = "\r"
 
         [selectAll, selectNone, reset, spacer, cancel, ok].forEach(stack.addArrangedSubview)
+        stack.widthAnchor.constraint(equalToConstant: 748).isActive = true
         return stack
     }
 
@@ -423,8 +430,9 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
             let image = FracRenderer(canvas: canvas, module: module, pointBudgetScale: min(0.06, self.settings.pointBudgetScale)).render()
             let elapsed = Date().timeIntervalSince(started)
             let nonBlack = canvas.nonBlackPixelCount()
+            let density = Double(nonBlack) / Double(canvas.width * canvas.height)
             let finalImage: NSImage
-            if nonBlack == 0 {
+            if nonBlack == 0 || density < 0.002 {
                 var rng = FracRandom()
                 for _ in 0..<8000 {
                     canvas.point(rng.int(canvas.width), rng.int(canvas.height), .spectrum(rng.next()))
