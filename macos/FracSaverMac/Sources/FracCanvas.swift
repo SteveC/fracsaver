@@ -23,7 +23,10 @@ struct FracRandom {
 final class FracCanvas {
     let width: Int
     let height: Int
+    var progressInterval = 60_000
+    var progressHandler: ((FracCanvas) -> Void)?
     private var pixels: [UInt8]
+    private var writeCount = 0
 
     init(width: Int, height: Int) {
         self.width = max(1, width)
@@ -54,6 +57,11 @@ final class FracCanvas {
         pixels[index + 1] = rgba.1
         pixels[index + 2] = rgba.2
         pixels[index + 3] = rgba.3
+        writeCount += 1
+        if progressInterval > 0, writeCount >= progressInterval {
+            writeCount = 0
+            progressHandler?(self)
+        }
     }
 
     func line(from start: CGPoint, to end: CGPoint, color: NSColor) {

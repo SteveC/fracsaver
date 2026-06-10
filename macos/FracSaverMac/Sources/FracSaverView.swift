@@ -10,16 +10,20 @@ public final class FracSaverView: ScreenSaverView {
     private var configController: FracSettingsWindowController?
     private var isRendering = false
     private var renderGeneration = 0
+    private var renderStartedAt = Date.distantPast
+    private var renderTimeout: TimeInterval { isPreview ? 4 : 7 }
 
     public override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
         animationTimeInterval = isPreview ? 1.8 : 1.0
+        FracLogger.logEnvironment()
         FracLogger.log("init frame=\(frame) preview=\(isPreview) log=\(FracLogger.logURL.path)")
     }
 
     public required init?(coder: NSCoder) {
         super.init(coder: coder)
         animationTimeInterval = 1.0
+        FracLogger.logEnvironment()
         FracLogger.log("init(coder:) frame=\(frame) preview=\(isPreview)")
     }
 
@@ -61,6 +65,13 @@ public final class FracSaverView: ScreenSaverView {
             FracLogger.log("animateOneFrame had no image; rendering now bounds=\(bounds)")
             renderNextModule()
         }
+        if isRendering && Date().timeIntervalSince(renderStartedAt) > renderTimeout {
+            FracLogger.log("render watchdog timeout generation=\(renderGeneration) elapsed=\(String(format: "%.3f", Date().timeIntervalSince(renderStartedAt)))s; advancing")
+            renderGeneration += 1
+            isRendering = false
+            lastSwitch = .distantPast
+            renderNextModule()
+        }
         if Date().timeIntervalSince(lastSwitch) >= settings.secondsPerModule {
             renderNextModule()
         }
@@ -92,8 +103,12 @@ public final class FracSaverView: ScreenSaverView {
         let pixelScale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         let maxWidth = isPreview ? 640 : 1440
         let maxHeight = isPreview ? 480 : 960
-        let width = max(320, min(maxWidth, Int(bounds.width * pixelScale)))
-        let height = max(240, min(maxHeight, Int(bounds.height * pixelScale)))
+        let fallbackWidth = isPreview ? 420 : 960
+        let fallbackHeight = isPreview ? 300 : 600
+        let boundsWidth = bounds.width > 1 ? Int(bounds.width * pixelScale) : fallbackWidth
+        let boundsHeight = bounds.height > 1 ? Int(bounds.height * pixelScale) : fallbackHeight
+        let width = max(320, min(maxWidth, boundsWidth))
+        let height = max(240, min(maxHeight, boundsHeight))
         let placeholder = FracCanvas(width: width, height: height)
         forceVisibleFallback(on: placeholder)
         currentImage = placeholder.image()
@@ -101,21 +116,38 @@ public final class FracSaverView: ScreenSaverView {
         displayIfNeeded()
         let started = Date()
         isRendering = true
+        renderStartedAt = started
         renderGeneration += 1
         let generation = renderGeneration
         let detail = settings.pointBudgetScale
-        FracLogger.log("render start module=\(currentModule.id) name=\(currentModule.name) canvas=\(width)x\(height) bounds=\(bounds)")
+        FracLogger.log("render start generation=\(generation) module=\(currentModule.id) name=\(currentModule.name) canvas=\(width)x\(height) bounds=\(bounds) timeout=\(renderTimeout)")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let canvas = FracCanvas(width: width, height: height)
+            canvas.progressInterval = self?.isPreview == true ? 18_000 : 45_000
+            var lastProgress = Date.distantPast
+            canvas.progressHandler = { canvas in
+                let now = Date()
+                guard now.timeIntervalSince(lastProgress) > 0.16 else { return }
+                lastProgress = now
+                let partialImage = canvas.image()
+                let partialNonBlack = canvas.nonBlackPixelCount()
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.renderGeneration == generation, self.isRendering else { return }
+                    self.currentImage = partialImage
+                    self.setNeedsDisplay(self.bounds)
+                }
+                FracLogger.log("render progress generation=\(generation) module=\(currentModule.id) nonBlackPixels=\(partialNonBlack)")
+            }
             let image = FracRenderer(canvas: canvas, module: currentModule, pointBudgetScale: detail).render()
             let elapsed = Date().timeIntervalSince(started)
             let nonBlack = canvas.nonBlackPixelCount()
-            FracLogger.log("render done module=\(currentModule.id) elapsed=\(String(format: "%.3f", elapsed))s nonBlackPixels=\(nonBlack)")
-            if nonBlack == 0 {
-                FracLogger.log("render produced black image; forcing fallback sparkle for module=\(currentModule.id)")
+            let density = Double(nonBlack) / Double(width * height)
+            FracLogger.log("render done generation=\(generation) module=\(currentModule.id) elapsed=\(String(format: "%.3f", elapsed))s nonBlackPixels=\(nonBlack) density=\(String(format: "%.4f", density))")
+            if nonBlack == 0 || density < 0.002 {
+                FracLogger.log("render too dark; forcing fallback sparkle for module=\(currentModule.id) density=\(String(format: "%.4f", density))")
                 self?.forceVisibleFallback(on: canvas)
             }
-            let finalImage = nonBlack == 0 ? canvas.image() : image
+            let finalImage = (nonBlack == 0 || density < 0.002) ? canvas.image() : image
             DispatchQueue.main.async {
                 guard let self, self.renderGeneration == generation else {
                     FracLogger.log("render discarded module=\(currentModule.id) generation=\(generation)")

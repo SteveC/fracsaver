@@ -11,7 +11,20 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
     private let moduleDescription = NSTextField(wrappingLabelWithString: "")
     private let parameterStack = NSStackView()
     private let logPathField = NSTextField(labelWithString: FracLogger.logURL.path)
+    private let groupTabs = NSSegmentedControl()
+    private let previewImageView = NSImageView()
+    private let previewStatus = NSTextField(labelWithString: "Select a module to preview.")
     private var selectedIndex = 0
+    private var selectedGroup = "All"
+    private var previewGeneration = 0
+
+    private var groups: [String] {
+        ["All"] + Array(Set(settings.modules.map(\.category))).sorted()
+    }
+
+    private var filteredIndices: [Int] {
+        settings.modules.indices.filter { selectedGroup == "All" || settings.modules[$0].category == selectedGroup }
+    }
 
     init(settings: FracSettings, onSave: @escaping (FracSettings) -> Void) {
         self.settings = settings
@@ -35,24 +48,27 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
-        settings.modules.count
+        filteredIndices.count
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
-        if tableView.selectedRow >= 0 {
-            selectedIndex = tableView.selectedRow
+        let visible = filteredIndices
+        if tableView.selectedRow >= 0, tableView.selectedRow < visible.count {
+            selectedIndex = visible[tableView.selectedRow]
             refreshInspector()
         }
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard row < settings.modules.count else { return nil }
-        let module = settings.modules[row]
+        let visible = filteredIndices
+        guard row < visible.count else { return nil }
+        let moduleIndex = visible[row]
+        let module = settings.modules[moduleIndex]
         switch tableColumn?.identifier.rawValue {
         case "enabled":
             let button = NSButton(checkboxWithTitle: "", target: self, action: #selector(toggleModule(_:)))
             button.state = module.enabled ? .on : .off
-            button.tag = row
+            button.tag = moduleIndex
             return button
         case "name":
             let field = label(module.name)
@@ -119,9 +135,28 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         split.orientation = .horizontal
         split.spacing = 14
         split.alignment = .top
-        split.addArrangedSubview(makeTable())
+        let left = NSStackView()
+        left.orientation = .vertical
+        left.spacing = 8
+        left.addArrangedSubview(makeGroupTabs())
+        left.addArrangedSubview(makeTable())
+        split.addArrangedSubview(left)
         split.addArrangedSubview(makeInspector())
         return split
+    }
+
+    private func makeGroupTabs() -> NSView {
+        let names = groups
+        groupTabs.segmentCount = names.count
+        groupTabs.segmentStyle = .rounded
+        groupTabs.target = self
+        groupTabs.action = #selector(changeGroup(_:))
+        for (index, name) in names.enumerated() {
+            groupTabs.setLabel(name, forSegment: index)
+            groupTabs.setWidth(max(58, CGFloat(name.count * 8 + 18)), forSegment: index)
+        }
+        groupTabs.selectedSegment = 0
+        return groupTabs
     }
 
     private func makeTable() -> NSScrollView {
@@ -156,8 +191,21 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         parameterStack.orientation = .vertical
         parameterStack.spacing = 8
 
+        previewImageView.imageScaling = .scaleProportionallyUpOrDown
+        previewImageView.wantsLayer = true
+        previewImageView.layer?.backgroundColor = NSColor.black.cgColor
+        previewImageView.layer?.cornerRadius = 6
+        previewImageView.heightAnchor.constraint(equalToConstant: 190).isActive = true
+
+        let previewButton = NSButton(title: "Render Preview", target: self, action: #selector(renderPreview))
+        previewStatus.font = .systemFont(ofSize: 11)
+        previewStatus.textColor = .secondaryLabelColor
+
         stack.addArrangedSubview(moduleTitle)
         stack.addArrangedSubview(moduleDescription)
+        stack.addArrangedSubview(previewImageView)
+        stack.addArrangedSubview(previewButton)
+        stack.addArrangedSubview(previewStatus)
         stack.addArrangedSubview(parameterStack)
         return stack
     }
@@ -204,6 +252,7 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         let metadata = FracModuleMetadata.forModule(id: module.id)
         moduleTitle.stringValue = module.name
         moduleDescription.stringValue = metadata.description
+        previewStatus.stringValue = "Preview shows the selected module with current settings."
         parameterStack.arrangedSubviews.forEach { view in
             parameterStack.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -213,6 +262,7 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
             let none = label("No editable module settings.")
             none.textColor = .secondaryLabelColor
             parameterStack.addArrangedSubview(none)
+            DispatchQueue.main.async { self.renderPreview() }
             return
         }
 
@@ -222,6 +272,23 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         for index in metadata.parameters.indices {
             parameterStack.addArrangedSubview(fieldRow(metadata.parameters[index], value: format(module.parameters[safe: index] ?? 0), tag: numericTag(index)))
         }
+        DispatchQueue.main.async { self.renderPreview() }
+    }
+
+    @objc private func changeGroup(_ sender: NSSegmentedControl) {
+        let names = groups
+        guard sender.selectedSegment >= 0, sender.selectedSegment < names.count else { return }
+        selectedGroup = names[sender.selectedSegment]
+        tableView.reloadData()
+        let visible = filteredIndices
+        if let row = visible.firstIndex(of: selectedIndex) {
+            tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        } else if let first = visible.first {
+            selectedIndex = first
+            tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        }
+        refreshInspector()
+        FracLogger.log("settings group changed group=\(selectedGroup) visible=\(visible.count)")
     }
 
     private func fieldRow(_ metadata: FracParameterMetadata, value: String, tag: Int) -> NSView {
@@ -262,7 +329,9 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
     @objc private func toggleModule(_ sender: NSButton) {
         guard sender.tag < settings.modules.count else { return }
         settings.modules[sender.tag].enabled = sender.state == .on
-        tableView.reloadData(forRowIndexes: IndexSet(integer: sender.tag), columnIndexes: IndexSet(integersIn: 0..<tableView.numberOfColumns))
+        if let row = filteredIndices.firstIndex(of: sender.tag) {
+            tableView.reloadData(forRowIndexes: IndexSet(integer: row), columnIndexes: IndexSet(integersIn: 0..<tableView.numberOfColumns))
+        }
         FracLogger.log("settings toggle module=\(settings.modules[sender.tag].id) enabled=\(settings.modules[sender.tag].enabled)")
     }
 
@@ -283,7 +352,9 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
             settings.modules[selectedIndex].parameters[index] = value
             sender.stringValue = format(value)
         }
-        tableView.reloadData(forRowIndexes: IndexSet(integer: selectedIndex), columnIndexes: IndexSet(integer: 3))
+        if let row = filteredIndices.firstIndex(of: selectedIndex) {
+            tableView.reloadData(forRowIndexes: IndexSet(integer: row), columnIndexes: IndexSet(integer: 3))
+        }
     }
 
     @objc private func updateSeconds(_ sender: NSTextField) {
@@ -318,6 +389,57 @@ final class FracSettingsWindowController: NSWindowController, NSTableViewDataSou
         tableView.reloadData()
         refreshInspector()
         FracLogger.log("settings restored defaults")
+    }
+
+    @objc private func renderPreview() {
+        guard selectedIndex < settings.modules.count else { return }
+        let module = settings.modules[selectedIndex]
+        previewGeneration += 1
+        let generation = previewGeneration
+        previewStatus.stringValue = "Rendering \(module.name)..."
+        FracLogger.log("settings preview start generation=\(generation) module=\(module.id)")
+        DispatchQueue.global(qos: .userInitiated).async {
+            let started = Date()
+            let canvas = FracCanvas(width: 420, height: 260)
+            canvas.progressInterval = 14_000
+            var lastProgress = Date.distantPast
+            canvas.progressHandler = { canvas in
+                let now = Date()
+                guard now.timeIntervalSince(lastProgress) > 0.18 else { return }
+                lastProgress = now
+                let partial = canvas.image()
+                DispatchQueue.main.async {
+                    guard self.previewGeneration == generation else { return }
+                    self.previewImageView.image = partial
+                    self.previewStatus.stringValue = "Rendering \(module.name)..."
+                }
+            }
+            let image = FracRenderer(canvas: canvas, module: module, pointBudgetScale: min(0.06, self.settings.pointBudgetScale)).render()
+            let elapsed = Date().timeIntervalSince(started)
+            let nonBlack = canvas.nonBlackPixelCount()
+            let finalImage: NSImage
+            if nonBlack == 0 {
+                var rng = FracRandom()
+                for _ in 0..<8000 {
+                    canvas.point(rng.int(canvas.width), rng.int(canvas.height), .spectrum(rng.next()))
+                }
+                finalImage = canvas.image()
+            } else {
+                finalImage = image
+            }
+            FracLogger.log("settings preview done generation=\(generation) module=\(module.id) elapsed=\(String(format: "%.3f", elapsed))s nonBlackPixels=\(nonBlack)")
+            DispatchQueue.main.async {
+                guard self.previewGeneration == generation else { return }
+                self.previewImageView.image = finalImage
+                self.previewStatus.stringValue = "Preview rendered in \(String(format: "%.2f", elapsed))s."
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            if self.previewGeneration == generation, self.previewStatus.stringValue.hasPrefix("Rendering") {
+                self.previewStatus.stringValue = "Preview is still rendering; try a lower Render detail value."
+                FracLogger.log("settings preview slow generation=\(generation) module=\(module.id)")
+            }
+        }
     }
 
     @objc private func revealLog() {

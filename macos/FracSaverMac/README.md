@@ -37,3 +37,9 @@ The saver writes lifecycle, settings, and render diagnostics to:
 ```
 
 The settings sheet also shows this path and includes a Reveal button.
+
+When macOS hosts the saver inside the legacy ScreenSaver container, the same log may appear under:
+
+```text
+~/Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/Library/Logs/FracSaverMac.log
+```

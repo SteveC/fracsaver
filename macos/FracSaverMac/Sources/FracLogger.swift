@@ -9,6 +9,13 @@ enum FracLogger {
         return logs.appendingPathComponent("FracSaverMac.log")
     }
 
+    static var fallbackLogURL: URL {
+        URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Logs", isDirectory: true)
+            .appendingPathComponent("FracSaverMac.log")
+    }
+
     static func log(_ message: String) {
         let url = logURL
         let line = "\(timestamp()) \(message)\n"
@@ -29,6 +36,10 @@ enum FracLogger {
                 NSLog("FracSaverMac log failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    static func logEnvironment() {
+        log("environment home=\(NSHomeDirectory()) primaryLog=\(logURL.path) fallbackLog=\(fallbackLogURL.path)")
     }
 
     private static func timestamp() -> String {
